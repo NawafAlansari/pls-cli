@@ -144,18 +144,21 @@ def showtasks() -> None:
     task_table.add_column('ID', justify='center')
     task_table.add_column('TASK')
     task_table.add_column('STATUS', justify='center')
+    task_table.add_column('Due', justify='center')
 
     for index, task in enumerate(Settings().get_tasks()):
         if task['done']:
             task_name = f'[{task_done_style}][s]{task["name"]}[/][/]'
             task_status = '[#bbf2b3]✓[/]'
             task_id = f'[{task_done_style}][s]{str(index + 1)}[/][/]'
+            task_due = f"[{task_done_style}]{"Today"}[/]" #TODO: add due data once it's implemented
         else:
             task_name = f'[{task_pending_style}]{task["name"]}[/]'
             task_status = f'[{task_pending_style}]○[/]'
             task_id = f'[{task_pending_style}]{str(index + 1)}[/]'
+            task_due = f"[{task_pending_style}]{"Today"}[/]" #TODO: add due data once it's implemented
 
-        task_table.add_row(task_id, task_name, task_status)
+        task_table.add_row(task_id, task_name, task_status, task_due)
     center_print(task_table)
 
     if Settings().all_tasks_done():
