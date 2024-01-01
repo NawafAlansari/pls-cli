@@ -4,6 +4,7 @@ import os
 import shutil
 from typing import Union
 
+
 import typer
 from rich import box
 from rich.align import Align
@@ -16,6 +17,10 @@ from rich.table import Table
 from pls_cli import __version__
 from pls_cli.utils.quotes import get_rand_quote
 from pls_cli.utils.settings import Settings
+
+from pls_cli.data_models import Task, TaskTable
+
+
 
 app = typer.Typer(rich_markup_mode='rich')
 console = Console()
@@ -135,31 +140,11 @@ def quotes(show: bool = True) -> None:
 @app.command(short_help='[s]Show all Tasks :open_book:[/]', deprecated=True)
 def showtasks() -> None:
     """Show all Tasks :open_book:"""
-    task_table = Table(
-        header_style=table_header_style,
-        style=table_header_style,
-        box=box.SIMPLE_HEAVY,
-    )
+    tasks = Settings().get_tasks()
+    tasks = [Task.from_dict(task) for task in tasks]
+    task_table = TaskTable(tasks) 
 
-    task_table.add_column('ID', justify='center')
-    task_table.add_column('TASK')
-    task_table.add_column('STATUS', justify='center')
-    task_table.add_column('Due', justify='center')
-
-    for index, task in enumerate(Settings().get_tasks()):
-        if task['done']:
-            task_name = f'[{task_done_style}][s]{task["name"]}[/][/]'
-            task_status = '[#bbf2b3]✓[/]'
-            task_id = f'[{task_done_style}][s]{str(index + 1)}[/][/]'
-            task_due = f"[{task_done_style}]{"Today"}[/]" #TODO: add due data once it's implemented
-        else:
-            task_name = f'[{task_pending_style}]{task["name"]}[/]'
-            task_status = f'[{task_pending_style}]○[/]'
-            task_id = f'[{task_pending_style}]{str(index + 1)}[/]'
-            task_due = f"[{task_pending_style}]{"Today"}[/]" #TODO: add due data once it's implemented
-
-        task_table.add_row(task_id, task_name, task_status, task_due)
-    center_print(task_table)
+    center_print(task_table.task_table)
 
     if Settings().all_tasks_done():
         print_no_pending_tasks()
@@ -177,14 +162,29 @@ def print_tasks(force_print: bool = False) -> None:
 
 
 @app.command()
-def add(task: str) -> None:
+def add(task_name: str, 
+        task_description:str = None, 
+        task_priority: int = None, 
+        task_due: str = None, 
+        task_completed: bool = False) -> None:
+
     """[bold green]Add[/bold green] a Task :sparkles: [light_slate_grey italic](Add task name inside quotes)[/]"""
-    new_task = {'name': task, 'done': False}
+    id = Settings().get_next_id()
+    new_task = Task(
+        task_id=id, 
+        task_name=task_name,
+        task_description=task_description,
+        task_priority=task_priority,
+        task_due=task_due,
+        task_completed=task_completed,
+    ).to_dict()
+
+    
     settings = Settings().get_settings()
     settings['tasks'].append(new_task)
     Settings().write_settings(settings)
     center_print(
-        Rule(f'Added "{task}" to the list', style=insert_or_delete_line_style),
+        Rule(f'Added "{task_name}" to the list', style=insert_or_delete_line_style),
         style=insert_or_delete_text_style,
     )
     print_tasks()
@@ -215,7 +215,7 @@ def done(taks_id: int) -> None:
         )
         return
 
-    if settings['tasks'][task_id]['done']:
+    if settings['tasks'][task_id]['completed']:
         center_print(
             Rule(
                 'No Updates Made, Task Already Done', style=warning_line_style
@@ -232,7 +232,7 @@ def done(taks_id: int) -> None:
         )
         return
 
-    settings['tasks'][task_id]['done'] = True
+    settings['tasks'][task_id]['completed'] = True
     Settings().write_settings(settings)
     center_print(
         Rule('Updated Task List', style=update_line_style),
@@ -265,7 +265,7 @@ def undone(task_id: int) -> None:
         )
         return
 
-    if not settings['tasks'][task_id]['done']:
+    if not settings['tasks'][task_id]['completed']:
         center_print(
             Rule(
                 'No Updates Made, Task Still Pending', style=warning_line_style
@@ -275,7 +275,7 @@ def undone(task_id: int) -> None:
         print_tasks()
         return
 
-    settings['tasks'][task_id]['done'] = False
+    settings['tasks'][task_id]['completed'] = False
     Settings().write_settings(settings)
     center_print(
         Rule('Updated Task List', style=update_text_style),
@@ -571,7 +571,12 @@ def config():
 
 
 @app.command()
-def edit(task_id: int, task: str):
+def edit(task_id: int, 
+         task_name: str = None, 
+         task_description: str = None, 
+         task_priority: int = None,
+         task_due: str = None,
+         ):
     """[bold yellow]Edit[/bold yellow] a task by id ✏️ [light_slate_grey italic] (Add task name inside quotes)[/]"""
     settings = Settings().get_settings()
     tasks = settings['tasks']
@@ -588,8 +593,24 @@ def edit(task_id: int, task: str):
 
     # check if task exists
     if task_id and task_id <= len(tasks):
-        old_task = tasks[task_id - 1]['name']
-        tasks[task_id - 1]['name'] = task
+        old_task = tasks[task_id - 1]
+        old_task = Task.from_dict(old_task)
+
+        if task_name:
+            old_task.name = task_name
+        if task_description:
+            old_task.description = task_description
+
+        if task_due:
+            old_task.due = task_due
+
+        if task_priority:
+            old_task.priority = task_priority
+        
+        task = old_task.to_dict()
+        tasks[task_id - 1] = task
+
+        tasks[task_id - 1] = task
     else:
         center_print(
             f'\nTask #{task_id} was not found, pls choose an existing ID\n',
@@ -604,6 +625,65 @@ def edit(task_id: int, task: str):
     )
     if not typer.confirm(
         f'Are you sure you want to edit Task #{task_id}?', show_default=True
+    ):
+        typer.clear()
+        print_tasks()
+        raise typer.Exit()
+
+    Settings().write_settings(settings)
+    typer.clear()
+    print_tasks()
+
+
+@app.command()
+def subtask(task_id: int, 
+            subtask_name: str, 
+            subtask_description: str = None, 
+            subtask_priority: int = None,
+            subtask_due: str = None,
+            ):
+    """[bold yellow]Add[/bold yellow] a subtask by id ✏️ [light_slate_grey italic] (Add task name inside quotes)[/]"""
+    settings = Settings().get_settings()
+    tasks = settings['tasks']
+
+    # check if task list is empty
+    if not tasks:
+        center_print(
+            f'[{warning_text_style}]Currently, you have no tasks to edit[/] 📝'
+        )
+        print_tasks_progress()
+        raise typer.Exit()
+
+    print_tasks()
+
+    # check if task exists
+    if task_id and task_id <= len(tasks):
+        task = tasks[task_id - 1]
+        subtask_id = settings.get_next_id()
+        subtask = Task(
+            subtask_id,
+            task_name=subtask_name,
+            task_description=subtask_description,
+            task_priority=subtask_priority,
+            task_due=subtask_due)
+        
+        task.addSubtask(subtask)   
+        task = task.to_dict()
+        tasks[task_id - 1] = task
+    else:
+        center_print(
+            f'\nTask #{task_id} was not found, pls choose an existing ID\n',
+            style=error_text_style,
+        )
+        raise typer.Exit()
+
+    # confirm edit task
+    center_print(
+        f'Added Subtask: {subtask_name} to Task: {task_id}\n',
+        style=insert_or_delete_text_style,
+    )
+    if not typer.confirm(
+        f'Are you sure you want to add subtask {subtask_name} to Task #{task_id}?', show_default=True
     ):
         typer.clear()
         print_tasks()
