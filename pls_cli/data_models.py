@@ -66,8 +66,13 @@ class Task:
 
 
     def addSubtask(self, subtask):
-        subtask.parent = self
-        self.subtasks.append(subtask)
+        subtask.parent = self.id 
+        self.subtasks.append(subtask.id)
+
+
+    def removeSubtask(self, subtask_id):
+        self.subtasks.remove(subtask_id)
+
 
 
     def to_dict(self) -> dict:
@@ -79,7 +84,8 @@ class Task:
             'created': self.created if self.created else None,
             'due': self.due if self.due else None,
             'completed': self.completed if self.completed else False, 
-            'subtasks': [subtask.to_dict() for subtask in self.subtasks]
+            'subtasks': self.subtasks if self.subtasks else [],
+            'parent': self.parent if self.parent else None
         }
     
     @classmethod
@@ -91,17 +97,22 @@ class Task:
         created = task_dict.get('created', None)
         due = task_dict.get('due', None)
         completed = task_dict.get('completed', False)
-        subtasks = [Task().from_dict(subtask) for subtask in task_dict.get('subtasks', [])] 
+        subtasks = [subtask_id for subtask_id in task_dict.get('subtasks', [])] 
+        parent = task_dict.get('parent', None)
+        
         task = cls(id, name, description, priority, created, due, completed)
+        
         task.subtasks = subtasks
-        return task 
+        task.parent = parent 
+
+        return task  
 
 class TaskTable: 
-    def __init__(self, tasks: list[Task], show_subtasks: bool = False): 
-        self.task_table = self._build_table(tasks, show_subtasks) 
+    def __init__(self, tasks: list[Task]): 
+        self.task_table = self._build_table(tasks) 
 
 
-    def _build_table(self, tasks: list[Task], show_subtasks: bool = False): 
+    def _build_table(self, tasks: list[Task]): 
         task_table = Table(
             header_style=table_header_style,
             style=table_header_style,
@@ -120,15 +131,12 @@ class TaskTable:
 
 
         for index, task in enumerate(tasks):
-            self._add_task(task, task_table)
-            if show_subtasks:
-                for subtask in task.subtasks:
-                    self._add_task(subtask, task_table)
+            self._add_task(task, task_table, tasks)
 
 
         return task_table
     
-    def _add_task(self, task: Task, table): 
+    def _add_task(self, task: Task, table, tasks: list[Task]): 
         if task.completed:
             task_name = f'[{task_done_style}]{task.name}[/]'
             task_description = f'[{task_done_style}]{task.description}[/]'
@@ -138,7 +146,7 @@ class TaskTable:
             task_due = f'[{task_done_style}]{task.due}[/]'
             task_id = f'[{task_done_style}]{str(task.id)}[/]'
             task_subtasks_counter = f'[{task_done_style}]{len(task.subtasks)}/{len(task.subtasks)}[/]'
-            task_parent = f'[{task_done_style}]{task.parent.id}[/]' if task.parent else '[#a0a0a0]None[/]'
+            task_parent = f'[{task_done_style}]{task.parent}[/]' if task.parent else '[#a0a0a0]None[/]'
         else:
             task_name = f'[{task_pending_style}]{task.name}[/]'
             task_description = f'[{task_pending_style}]{task.description}[/]'
@@ -147,9 +155,10 @@ class TaskTable:
             task_created = f'[{task_pending_style}]{task.created}[/]'
             task_due = f'[{task_pending_style}]{task.due}[/]'
             task_id = f'[{task_pending_style}]{str(task.id)}[/]'
-            num_done_subtasks = len([subtask for subtask in task.subtasks if subtask.completed])
+
+            num_done_subtasks = len([subtask for subtask in tasks if subtask.completed and subtask.parent == task.id])
             task_subtasks_counter = f'[{task_pending_style}]{num_done_subtasks}/{len(task.subtasks)}[/]'
-            task_parent = f'[{task_pending_style}]{task.parent.id}[/]' if task.parent else '[#a0a0a0]None[/]'
+            task_parent = f'[{task_pending_style}]{task.parent}[/]' if task.parent else '[#a0a0a0]None[/]'
             
         table.add_row(
                 task_id, 
@@ -165,6 +174,11 @@ class TaskTable:
 
 
     
+
+def get_subtasks(task: Task, tasks: list[Task]) -> list[Task]:
+    subtask_ids = task.subtasks
+    subtasks = list(filter(lambda t: t.id in subtask_ids, tasks))
+    return subtasks
 
 
 from rich.rule import Rule
@@ -204,16 +218,16 @@ def center_print(
         
 if __name__ == "__main__":
     task1 = Task(1, 'Task 1', 'This is task 1', 'HIGH', '2021-09-01', '2021-09-02', False)
-    task2 = Task(2, 'Task 2', 'This is task 2', 'HIGH', '2021-09-01', '2021-09-02', True)
-    task3 = Task(3, 'Task 3', 'This is task 3', 'HIGH', '2021-09-01', '2021-09-02', False)
-    task4 = Task(4, 'Task 4', 'This is task 4', 'HIGH', '2021-09-01', '2021-09-02', False)
+    task2 = Task(2, 'Task 2', 'This is task 2', 'HIGH', '2021-09-01', '2021-09-02', False)
+    task3 = Task(3, 'Task 3', 'This is task 3', 'HIGH', '2021-09-01', '2021-09-02', True)
+    task4 = Task(4, 'Task 4', 'This is task 4', 'HIGH', '2021-09-01', '2021-09-02', True)
     task5 = Task(5, 'Task 5', 'This is task 5', 'HIGH', '2021-09-01', '2021-09-02', False)
     
-    task1.addSubtask(Task(6, 'Subtask 1', 'This is subtask 1', 'HIGH', '2021-09-01', '2021-09-02', True))
-    task1.addSubtask(Task(7, 'Subtask 2', 'This is subtask 2', 'HIGH', '2021-09-01', '2021-09-02', False))
-
+    task1.addSubtask(task2)
+    task1.addSubtask(task3)
+    task2.addSubtask(task4)
     tasks = [task1, task2, task3, task4, task5]
-    task_table = TaskTable(tasks, False)
+    task_table = TaskTable(tasks)
 
 
     print(task1.to_dict())

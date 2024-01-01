@@ -311,7 +311,14 @@ def delete(task_id: int) -> None:
         return
 
     deleted_task = settings['tasks'][task_id]
+    parent_task = settings['tasks'][task_id].get('parent', None)
     del settings['tasks'][task_id]
+    
+    if parent_task: 
+        parent_task = settings['tasks'][parent_task - 1]
+        parent_task = Task.from_dict(parent_task)
+        parent_task.removeSubtask(task_id + 1)
+        settings['tasks'][parent_task.id - 1] = parent_task.to_dict()
     Settings().write_settings(settings)
     center_print(
         Rule(
@@ -637,12 +644,14 @@ def edit(task_id: int,
 
 @app.command()
 def subtask(task_id: int, 
-            subtask_name: str, 
+            subtask_id: int = None,
+            subtask_name: str = None, 
             subtask_description: str = None, 
             subtask_priority: int = None,
             subtask_due: str = None,
             ):
     """[bold yellow]Add[/bold yellow] a subtask by id ✏️ [light_slate_grey italic] (Add task name inside quotes)[/]"""
+
     settings = Settings().get_settings()
     tasks = settings['tasks']
 
@@ -659,17 +668,35 @@ def subtask(task_id: int,
     # check if task exists
     if task_id and task_id <= len(tasks):
         task = tasks[task_id - 1]
-        subtask_id = settings.get_next_id()
-        subtask = Task(
-            subtask_id,
-            task_name=subtask_name,
-            task_description=subtask_description,
-            task_priority=subtask_priority,
-            task_due=subtask_due)
+        if subtask_id: 
+            subtask = tasks[subtask_id - 1]
+
+            task = Task.from_dict(task)
+            subtask = Task.from_dict(subtask)
+            task.addSubtask(subtask)
+
+            task = task.to_dict()
+            subtask = subtask.to_dict()
+            tasks[task_id - 1] = task
+            tasks[subtask_id - 1] = subtask
+
+            
+        else: 
+            subtask_id = Settings().get_next_id()
+            task = Task.from_dict(task)
+            subtask = Task(
+                subtask_id,
+                task_name=subtask_name,
+                task_description=subtask_description,
+                task_priority=subtask_priority,
+                task_due=subtask_due)
         
-        task.addSubtask(subtask)   
-        task = task.to_dict()
-        tasks[task_id - 1] = task
+            task.addSubtask(subtask)   
+            task = task.to_dict()
+            subtask = subtask.to_dict()
+            tasks[task_id - 1] = task
+            tasks.append(subtask)
+    
     else:
         center_print(
             f'\nTask #{task_id} was not found, pls choose an existing ID\n',
