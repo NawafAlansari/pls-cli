@@ -12,7 +12,7 @@ class Settings:
             self.config_path, self.config_name
         )
         self.create_dir_if_not_exists()
-        self.minimal_default_config = {'user_name': '', 'tasks': []}
+        self.minimal_default_config = {'user_name': '', 'tasks': [], "last_task_id": 0}
 
     def get_config_name(self):
         return 'config.json'
@@ -82,6 +82,6 @@ class Settings:
     
 
     def get_next_id(self) -> int:
-        if not self.get_tasks():
-            return 1
-        return max(task['id'] for task in self.get_tasks()) + 1
+        self.increment_last_task_id()
+        return self.get_settings().get("last_task_id", 1)
+
